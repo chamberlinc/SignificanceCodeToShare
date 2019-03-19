@@ -5,20 +5,14 @@
 #####
 ### Requires Input!
 #####
-# wd <- "<PATH/TO/FOLDER/HERE/SignificanceCodeToShare>"
-wd <- "/Users/cac118/OneDrive - Duke University/FFTvHHT/code/SignificanceCodeToShare"
 
-dataset <- "Ichetucknee_compiled.RData" #options are "whitenoise_compiled.RData", "Ichetucknee_compiled.RData", or "Potomac_compiled.RData"
+dataset <- "whitenoise_compiled.RData" #options are "whitenoise_compiled.RData", "Ichetucknee_compiled.RData", or "Potomac_compiled.RData"
 
 #####
 ### Setup
 #####
-library(gridExtra)
-library(zoo)
-library(foreach)
-library(dplyr)
-library(xts)
-source(paste0(wd, "/helpfulfunctions.R"))
+lapply(list("gridExtra", "zoo", "foreach","dplyr","xts","pracma","EMD","hht"), require, character.only = TRUE)
+source("helpfulfunctions.R")
 
 if(dataset == "whitenoise_compiled.RData") {
   set.seed(64) ### See "MakeWhiteNoise.R"
@@ -65,9 +59,12 @@ if(dataset == "whitenoise_compiled.RData") {
 #####
 ### View Results
 #####
-load(paste0(wd, "/", dataset))
+load(dataset)
 
 my_PlotIMFs(named.result[2:15], main = named.result[1]) # I just changed this slightly to add the title
+
+#MB: this function creates a similar graph
+hht::PlotIMFs(named.result)
 
 investigate.IMF(6, named.result, timeseries$DateTime_EST) # Look closer at individual IMFs
 
@@ -101,6 +98,13 @@ periods <- as.data.frame(foreach(j = 1:ncol(named.result$imf), .combine = "rbind
 }); names(periods) <- c("IMF", "MeanPeriod_hrs", "VariancePeriod_hrs", "MedianPeriod_hrs", "RangePeriod_hrs", "NumberPeaks")
 View(periods)
 
+#MB: another way to estimate period is to use the Hilbert spectrum
+af <- EMD::hilbertspec(named.result$imf) #hilbert spectrum compute instantaneous amplitude and frequency
+periods2 <- data.frame(MeanPeriod_hrs = as.vector(1/colMeans(af$instantfreq)), VariancePeriod_hrs = apply(1/af$instantfreq, 2, var),
+                      MedianPeriod_hrs = apply(1/af$instantfreq, 2, median))
+View(periods2)
+#Results are pretty similar to your computation
+
 ### This code produces histograms of the periods of each IMF
 period.hists <- foreach(j = 1:ncol(named.result$imf), .packages = c("pracma", "ggplot2")) %do% {
   x <- timeseries$DateTime_EST
@@ -126,6 +130,13 @@ period.hists <- foreach(j = 1:ncol(named.result$imf), .packages = c("pracma", "g
   
 }
 grid.arrange(grobs = period.hists)
+
+#MB: histograms using hilbert spec
+par(mfrow =c(3,3))
+for(i in 1:ncol(af$instantfreq)) {
+  hist(1/af$instantfreq[,i], main = paste("IMF",seq(1,9,1)[i],sep =''), xlab = 'Period (hours)')
+}
+par(mfrow = c(1,1)) #restore graphic settings
 
 #####
 ### Significance Test
@@ -176,3 +187,15 @@ ggplot(peaks,
   stat_function(fun = fun.1) +
   stat_function(fun = fun.2)
 
+##Reproduction of figure 7 from Wu et al. 2007
+sigtest <- data.frame(AmplitudeVariance = apply(af$amplitude,2,var), MeanPeriod_hrs = as.vector(colMeans(1/af$instantfreq)), 
+                      n = apply(af$amplitude,2, length), sd = apply(af$amplitude,2,sd))
+sigtest$upr <- sigtest$AmplitudeVariance + 1.96*(sigtest$sd/sqrt(sigtest$n))
+sigtest$lwr <- sigtest$AmplitudeVariance - 1.96*(sigtest$sd/sqrt(sigtest$n))
+
+plot(log(sigtest$AmplitudeVariance) ~ log(sigtest$MeanPeriod_hrs),
+     xlab = 'log10 Period (hours)', ylab = 'log10 amplitude', las = 1, ylim = c(-14,-2))
+par(new = T)
+plot(log(sigtest$upr) ~ log(sigtest$MeanPeriod_hrs), col = 'red', ylim = c(-14,-2))
+par(new = T)
+plot(log(sigtest$lwr) ~ log(sigtest$MeanPeriod_hrs), col = 'blue', ylim = c(-14,-2))
