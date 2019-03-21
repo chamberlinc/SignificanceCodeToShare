@@ -100,9 +100,12 @@ View(periods)
 
 #MB: another way to estimate period is to use the Hilbert spectrum
 af <- EMD::hilbertspec(named.result$imf) #hilbert spectrum compute instantaneous amplitude and frequency
-periods2 <- data.frame(MeanPeriod_hrs = as.vector(1/colMeans(af$instantfreq)), VariancePeriod_hrs = apply(1/af$instantfreq, 2, var),
+periods2 <- data.frame(MeanPeriod_hrs = as.vector(1/colMeans(af$instantfreq)),
                       MedianPeriod_hrs = apply(1/af$instantfreq, 2, median))
 View(periods2)
+plot(periods$MeanPeriod_hrs ~ periods2$MeanPeriod_hrs, ylab = 'Mean period using maximum peak', xlab = 'Mean period using Hilbert spectrum',
+     xlim = c(0,260), ylim =c(0,260), las = 1)
+abline(0,1, lty=2)
 #Results are pretty similar to your computation
 
 ### This code produces histograms of the periods of each IMF
@@ -166,9 +169,12 @@ peaks <- as.data.frame(foreach(j = 1:ncol(named.result$imf), .packages = c("dply
 # grid.arrange(grobs = peaks)
 
 peaks$Energy <- peaks$Energy * (1 / sum(peaks$Energy)) # This normalizes the energy so that it always equals one. I think this is kosher, it definitely does not work well without it, but would love feedback.
+#MB: I don't understand the need to normalize... doesn't change anything for me
 
 ### fun.1 and fun.2 are the upper and lower boundaries given by equation 3.9 w/ 99th percentiles. I believe this is valid so long as you are interested in periods roughly equivalent to the mean period. So probably only for IMF 3-6 perhaps?
 ### for these functions I think that N = the number of IMFs, but maybe it equals the number of frequencies in the fourier transform?
+#MB: yes this is confusing in Wu and Huang 2004, from the text looks like N = number of observation of the time serie
+#In figure 5, they actually use equation 3.6
 fun.1 <- function(x) {
   k <- 0.675
   -x + k * sqrt(2 / ncol(named.result$imf) * exp(x / 2))
@@ -179,6 +185,9 @@ fun.2 <- function(x) {
   -x - k * sqrt(2 / ncol(named.result$imf) * exp(x / 2))
 }
 
+upr <- function(x) {
+  
+}
 ggplot(peaks,
        aes(x = log(Period),
            y =log(Energy),
@@ -187,15 +196,4 @@ ggplot(peaks,
   stat_function(fun = fun.1) +
   stat_function(fun = fun.2)
 
-##Reproduction of figure 7 from Wu et al. 2007
-sigtest <- data.frame(AmplitudeVariance = apply(af$amplitude,2,var), MeanPeriod_hrs = as.vector(colMeans(1/af$instantfreq)), 
-                      n = apply(af$amplitude,2, length), sd = apply(af$amplitude,2,sd))
-sigtest$upr <- sigtest$AmplitudeVariance + 1.96*(sigtest$sd/sqrt(sigtest$n))
-sigtest$lwr <- sigtest$AmplitudeVariance - 1.96*(sigtest$sd/sqrt(sigtest$n))
 
-plot(log(sigtest$AmplitudeVariance) ~ log(sigtest$MeanPeriod_hrs),
-     xlab = 'log10 Period (hours)', ylab = 'log10 amplitude', las = 1, ylim = c(-14,-2))
-par(new = T)
-plot(log(sigtest$upr) ~ log(sigtest$MeanPeriod_hrs), col = 'red', ylim = c(-14,-2))
-par(new = T)
-plot(log(sigtest$lwr) ~ log(sigtest$MeanPeriod_hrs), col = 'blue', ylim = c(-14,-2))
