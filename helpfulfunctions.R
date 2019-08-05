@@ -93,3 +93,5 @@ investigate.IMF <- function(IMFs, named.result, orig.timestamps) {
   dygraph(buzz) %>% dyRangeSelector()
   
 }
+
+## Comment
